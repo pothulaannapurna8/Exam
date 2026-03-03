@@ -1,6 +1,5 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { API_BASE_URL } from '../constants';
 
 // Helper: map a similarity score to a human-readable relevance label and row colour
 const getRelevanceInfo = (score) => {
@@ -15,25 +14,53 @@ const Results = () => {
     const location = useLocation();
     const { results, branch } = location.state || {};
 
-    // ---- Download plan ----
-    const handleDownloadPlan = async () => {
-        try {
-            const response = await fetch(`${API_BASE_URL}/download-plan`, {
-                method: 'GET',
-            });
-            if (!response.ok) throw new Error(`Server error: ${response.status}`);
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'GATE_Bridge_Plan.pdf';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
-        } catch (err) {
-            alert(`Download failed: ${err.message}`);
+    // ---- Download plan (client-side, no extra API call needed) ----
+    const handleDownloadPlan = () => {
+        const lines = [];
+        lines.push(`GATE 2026 Personalised Study Plan`);
+        lines.push(`Branch: ${branch}`);
+        lines.push(`Generated: ${new Date().toLocaleString()}`);
+        lines.push('');
+
+        if (score !== undefined && score !== null) {
+            lines.push(`Overall Similarity Score: ${Math.round(score * 100)}%`);
+            lines.push('');
         }
+
+        if (topics.length > 0) {
+            lines.push('=== GAP ANALYSIS ===');
+            topics.forEach((topic, i) => {
+                const name = typeof topic === 'string'
+                    ? topic
+                    : (topic.topic ?? topic.name ?? topic.subject ?? `Topic ${i + 1}`);
+                const pct = topic.score !== undefined
+                    ? `${Math.round(topic.score * 100)}%`
+                    : '';
+                const status = topic.status ?? 'Evaluated';
+                lines.push(`${i + 1}. ${name}  |  ${status}  ${pct}`);
+            });
+            lines.push('');
+        }
+
+        if (lectures.length > 0) {
+            lines.push('=== RECOMMENDED LECTURES ===');
+            lectures.forEach((lec, i) => {
+                const title = typeof lec === 'string' ? `Lecture ${i + 1}` : (lec.title ?? `Lecture ${i + 1}`);
+                const url = typeof lec === 'string' ? lec : (lec.url ?? '');
+                lines.push(`${i + 1}. ${title}`);
+                if (url) lines.push(`   ${url}`);
+            });
+        }
+
+        const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `GATE_${branch}_Study_Plan.txt`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
     };
 
     // ---- No results yet (user navigated directly) ----
