@@ -1,66 +1,182 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
+import { API_BASE_URL } from '../constants';
+
+// Helper: map a similarity score to a human-readable relevance label and row colour
+const getRelevanceInfo = (score) => {
+    if (score === undefined || score === null) return { label: 'N/A', color: 'inherit' };
+    const pct = Math.round(score * 100);
+    if (pct >= 70) return { label: `Both (GATE & College) — ${pct}%`, color: 'var(--priority-high)' };
+    if (pct >= 40) return { label: `GATE Only — ${pct}%`, color: 'var(--priority-medium)' };
+    return { label: `College Only — ${pct}%`, color: 'var(--priority-low)' };
+};
 
 const Results = () => {
-    const handleDownloadPlan = () => {
-        alert('Your GATE Bridge Plan has been generated!');
+    const location = useLocation();
+    const { results, branch } = location.state || {};
+
+    // ---- Download plan ----
+    const handleDownloadPlan = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/download-plan`, {
+                method: 'GET',
+            });
+            if (!response.ok) throw new Error(`Server error: ${response.status}`);
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'GATE_Bridge_Plan.pdf';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            alert(`Download failed: ${err.message}`);
+        }
     };
+
+    // ---- No results yet (user navigated directly) ----
+    if (!results) {
+        return (
+            <main className="container">
+                <div className="section-header">
+                    <h2>Evaluation Results</h2>
+                    <p>No analysis data found. Please&nbsp;
+                        <Link to="/upload" style={{ color: 'var(--primary-navy)' }}>upload your syllabus</Link>
+                        &nbsp;first.
+                    </p>
+                </div>
+            </main>
+        );
+    }
+
+    // ---- Normalise the response ----
+    // The backend returns an object. Possible shapes:
+    //   { similarity_score, gaps: [...], lectures: [...] }
+    //   or an array of topic objects.
+    const topics = Array.isArray(results) ? results : (results.gaps ?? []);
+    const score = results.similarity_score;
+    const lectures = results.lectures ?? [];
 
     return (
         <main className="container">
             <div className="section-header">
                 <h2>Evaluation Results</h2>
-                <p>View priority and status of uploaded materials and expected tasks.</p>
+                <p>GATE Branch: <strong>{branch}</strong> &mdash; AI-powered syllabus gap analysis.</p>
             </div>
 
-            <div className="table-container">
-                <table className="results-table">
-                    <thead>
-                        <tr>
-                            <th>Subject/Topic</th>
-                            <th>Relevance</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr style={{ backgroundColor: 'var(--priority-high)' }}>
-                            <td><strong>Data Structures & Algorithms</strong></td>
-                            <td><strong>Both (GATE & College)</strong></td>
-                            <td>Evaluated</td>
-                            <td><Link to="/resources" style={{ color: 'var(--primary-navy)' }}><i className="fa-solid fa-arrow-right"></i> View</Link></td>
-                        </tr>
-                        <tr style={{ backgroundColor: 'var(--priority-medium)' }}>
-                            <td><strong>Engineering Mathematics</strong></td>
-                            <td><strong>GATE Only</strong></td>
-                            <td>Pending</td>
-                            <td><Link to="/resources" style={{ color: 'var(--primary-navy)' }}><i className="fa-solid fa-arrow-right"></i> View</Link></td>
-                        </tr>
-                        <tr style={{ backgroundColor: 'var(--priority-low)' }}>
-                            <td><strong>Software Engineering</strong></td>
-                            <td><strong>College Only</strong></td>
-                            <td>Action Needed</td>
-                            <td><Link to="/resources" style={{ color: 'var(--primary-navy)' }}><i className="fa-solid fa-arrow-right"></i> View</Link></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+            {/* Similarity score pill */}
+            {score !== undefined && score !== null && (
+                <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                    <span style={{
+                        display: 'inline-block',
+                        padding: '0.6rem 1.6rem',
+                        background: 'var(--primary-navy)',
+                        color: '#fff',
+                        borderRadius: '2rem',
+                        fontSize: '1.1rem',
+                        fontWeight: 600,
+                        boxShadow: '0 4px 15px rgba(44,62,80,0.25)'
+                    }}>
+                        Overall Similarity Score: {Math.round(score * 100)}%
+                    </span>
+                </div>
+            )}
 
+            {/* Topic gap table */}
+            {topics.length > 0 ? (
+                <div className="table-container">
+                    <table className="results-table">
+                        <thead>
+                            <tr>
+                                <th>Subject / Topic</th>
+                                <th>Relevance</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {topics.map((topic, index) => {
+                                const topicName = typeof topic === 'string'
+                                    ? topic
+                                    : (topic.topic ?? topic.name ?? topic.subject ?? JSON.stringify(topic));
+                                const { label, color } = getRelevanceInfo(topic.score ?? score);
+                                return (
+                                    <tr key={index} style={{ backgroundColor: color }}>
+                                        <td><strong>{topicName}</strong></td>
+                                        <td><strong>{label}</strong></td>
+                                        <td>{topic.status ?? 'Evaluated'}</td>
+                                        <td>
+                                            <Link to="/resources" style={{ color: 'var(--primary-navy)' }}>
+                                                <i className="fa-solid fa-arrow-right"></i> View
+                                            </Link>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            ) : (
+                <div style={{ textAlign: 'center', padding: '2rem', color: '#555' }}>
+                    <i className="fa-solid fa-circle-check" style={{ fontSize: '2rem', color: '#2ecc71', marginBottom: '1rem', display: 'block' }}></i>
+                    No gaps found! Your syllabus covers all the relevant GATE topics.
+                </div>
+            )}
+
+            {/* YouTube lecture recommendations */}
+            {lectures.length > 0 && (
+                <div style={{ marginTop: '2rem' }}>
+                    <h3 style={{ color: 'var(--primary-navy)', marginBottom: '1rem' }}>
+                        <i className="fa-brands fa-youtube" style={{ color: '#ff0000', marginRight: '8px' }}></i>
+                        Recommended Lectures
+                    </h3>
+                    <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                        {lectures.map((lec, i) => {
+                            const url = typeof lec === 'string' ? lec : (lec.url ?? '#');
+                            const title = typeof lec === 'string' ? `Lecture ${i + 1}` : (lec.title ?? `Lecture ${i + 1}`);
+                            return (
+                                <li key={i}>
+                                    <a href={url} target="_blank" rel="noopener noreferrer"
+                                        style={{ color: 'var(--primary-navy)', textDecoration: 'none', fontWeight: 500 }}>
+                                        <i className="fa-solid fa-play-circle" style={{ marginRight: '6px', color: '#ff0000' }}></i>
+                                        {title}
+                                    </a>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </div>
+            )}
+
+            {/* Download plan */}
             <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-                <button id="download-plan-btn" className="btn" onClick={handleDownloadPlan}
-                    style={{ padding: '1rem 2rem', fontSize: '1.1rem', boxShadow: '0 4px 15px rgba(46, 204, 113, 0.4)' }}>
-                    <i className="fa-solid fa-download" style={{ marginRight: '8px' }}></i> Download Personalized Study Plan
+                <button
+                    id="download-plan-btn"
+                    className="btn"
+                    onClick={handleDownloadPlan}
+                    style={{ padding: '1rem 2rem', fontSize: '1.1rem', boxShadow: '0 4px 15px rgba(46, 204, 113, 0.4)' }}
+                >
+                    <i className="fa-solid fa-download" style={{ marginRight: '8px' }}></i>
+                    Download Personalised Study Plan
                 </button>
             </div>
 
+            {/* Topic of the day */}
             <div className="topic-of-day"
                 style={{ marginTop: '3rem', background: 'var(--bg-white)', borderRadius: 'var(--border-radius)', padding: '2rem', boxShadow: 'var(--box-shadow)', textAlign: 'center', border: '2px solid var(--primary-green)' }}>
                 <h3 style={{ color: 'var(--primary-navy)', marginBottom: '1rem' }}>
                     <i className="fa-solid fa-star" style={{ color: '#f1c40f' }}></i> Topic of the Day
                 </h3>
                 <p style={{ marginBottom: '1.5rem', fontSize: '1.1rem' }}><strong>Operating Systems: Memory Management</strong></p>
-                <p style={{ marginBottom: '1.5rem', color: '#555' }}>Master the core concepts of paging, segmentation, and virtual memory. This topic is highly relevant for both GATE and College exams.</p>
-                <Link to="/resources" className="btn">Go to Resources <i className="fa-solid fa-arrow-right" style={{ marginLeft: '5px' }}></i></Link>
+                <p style={{ marginBottom: '1.5rem', color: '#555' }}>
+                    Master the core concepts of paging, segmentation, and virtual memory.
+                    This topic is highly relevant for both GATE and college exams.
+                </p>
+                <Link to="/resources" className="btn">
+                    Go to Resources <i className="fa-solid fa-arrow-right" style={{ marginLeft: '5px' }}></i>
+                </Link>
             </div>
         </main>
     );
