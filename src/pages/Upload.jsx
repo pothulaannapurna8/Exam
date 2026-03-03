@@ -2,15 +2,15 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../constants';
 
-// Supported GATE branches — must match the backend GATE syllabus PDFs
+// Supported GATE branches — values must exactly match the backend syllabus folder names
 const GATE_BRANCHES = [
-    { value: 'CSE', label: 'Computer Science & Engineering (CSE)' },
-    { value: 'ECE', label: 'Electronics & Communication Engineering (ECE)' },
-    { value: 'EE', label: 'Electrical Engineering (EE)' },
-    { value: 'ME', label: 'Mechanical Engineering (ME)' },
-    { value: 'CE', label: 'Civil Engineering (CE)' },
-    { value: 'CH', label: 'Chemical Engineering (CH)' },
-    { value: 'IN', label: 'Instrumentation Engineering (IN)' },
+    { value: 'CE_2026', label: 'Civil Engineering (CE)' },
+    { value: 'CH_2026', label: 'Chemical Engineering (CH)' },
+    { value: 'CS_2026', label: 'Computer Science & Engineering (CS)' },
+    { value: 'DA_2026', label: 'Data Science & Artificial Intelligence (DA)' },
+    { value: 'EC_2026', label: 'Electronics & Communication Engineering (EC)' },
+    { value: 'EE_2026', label: 'Electrical Engineering (EE)' },
+    { value: 'ME_2026', label: 'Mechanical Engineering (ME)' },
 ];
 
 const Upload = () => {
