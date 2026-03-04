@@ -1,13 +1,13 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
-// Helper: map a similarity score to a human-readable relevance label and row colour
-const getRelevanceInfo = (score) => {
-    if (score === undefined || score === null) return { label: 'N/A', color: 'inherit' };
-    const pct = Math.round(score * 100);
-    if (pct >= 70) return { label: `Both (GATE & College) — ${pct}%`, color: 'var(--priority-high)' };
-    if (pct >= 40) return { label: `GATE Only — ${pct}%`, color: 'var(--priority-medium)' };
-    return { label: `College Only — ${pct}%`, color: 'var(--priority-low)' };
+// Helper: map a similarity percentage (0-100) to a human-readable relevance label and row colour
+const getRelevanceInfo = (pct) => {
+    if (pct === undefined || pct === null) return { label: 'N/A', color: 'inherit' };
+    const roundedPct = Math.round(pct);
+    if (roundedPct >= 70) return { label: `Both (GATE & College) — ${roundedPct}%`, color: 'var(--priority-high)' };
+    if (roundedPct >= 40) return { label: `GATE Only — ${roundedPct}%`, color: 'var(--priority-medium)' };
+    return { label: `College Only — ${roundedPct}%`, color: 'var(--priority-low)' };
 };
 
 const Results = () => {
@@ -23,20 +23,16 @@ const Results = () => {
         lines.push('');
 
         if (score !== undefined && score !== null) {
-            lines.push(`Overall Similarity Score: ${Math.round(score * 100)}%`);
+            lines.push(`Overall Similarity Score: ${Math.round(score)}%`);
             lines.push('');
         }
 
         if (topics.length > 0) {
             lines.push('=== GAP ANALYSIS ===');
             topics.forEach((topic, i) => {
-                const name = typeof topic === 'string'
-                    ? topic
-                    : (topic.topic ?? topic.name ?? topic.subject ?? `Topic ${i + 1}`);
-                const pct = topic.score !== undefined
-                    ? `${Math.round(topic.score * 100)}%`
-                    : '';
-                const status = topic.status ?? 'Evaluated';
+                const name = topic.gate_topic || `Topic ${i + 1}`;
+                const pct = topic.similarity !== undefined ? `${Math.round(topic.similarity)}%` : '';
+                const status = topic.priority || 'Evaluated';
                 lines.push(`${i + 1}. ${name}  |  ${status}  ${pct}`);
             });
             lines.push('');
@@ -45,8 +41,8 @@ const Results = () => {
         if (lectures.length > 0) {
             lines.push('=== RECOMMENDED LECTURES ===');
             lectures.forEach((lec, i) => {
-                const title = typeof lec === 'string' ? `Lecture ${i + 1}` : (lec.title ?? `Lecture ${i + 1}`);
-                const url = typeof lec === 'string' ? lec : (lec.url ?? '');
+                const title = lec.video?.title || `Lecture ${i + 1}`;
+                const url = lec.video?.url || '';
                 lines.push(`${i + 1}. ${title}`);
                 if (url) lines.push(`   ${url}`);
             });
@@ -79,12 +75,10 @@ const Results = () => {
     }
 
     // ---- Normalise the response ----
-    // The backend returns an object. Possible shapes:
-    //   { similarity_score, gaps: [...], lectures: [...] }
-    //   or an array of topic objects.
-    const topics = Array.isArray(results) ? results : (results.gaps ?? []);
-    const score = results.similarity_score;
-    const lectures = results.lectures ?? [];
+    const topics = results.results ?? [];
+    const score = results.overall_similarity;
+    const lectures = results.recommendations ?? [];
+    const comparisonSummary = results.comparison_result;
 
     return (
         <main className="container">
@@ -93,21 +87,28 @@ const Results = () => {
                 <p>GATE Branch: <strong>{branch}</strong> &mdash; AI-powered syllabus gap analysis.</p>
             </div>
 
-            {/* Similarity score pill */}
+            {/* Similarity score pill & Summary */}
             {score !== undefined && score !== null && (
                 <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-                    <span style={{
-                        display: 'inline-block',
-                        padding: '0.6rem 1.6rem',
-                        background: 'var(--primary-navy)',
-                        color: '#fff',
-                        borderRadius: '2rem',
-                        fontSize: '1.1rem',
-                        fontWeight: 600,
-                        boxShadow: '0 4px 15px rgba(44,62,80,0.25)'
-                    }}>
-                        Overall Similarity Score: {Math.round(score * 100)}%
-                    </span>
+                    <div style={{ marginBottom: '1rem' }}>
+                        <span style={{
+                            display: 'inline-block',
+                            padding: '0.6rem 1.6rem',
+                            background: 'var(--primary-navy)',
+                            color: '#fff',
+                            borderRadius: '2rem',
+                            fontSize: '1.1rem',
+                            fontWeight: 600,
+                            boxShadow: '0 4px 15px rgba(44,62,80,0.25)'
+                        }}>
+                            Overall Similarity Score: {Math.round(score)}%
+                        </span>
+                    </div>
+                    {comparisonSummary && (
+                        <p style={{ color: '#555', fontSize: '1.05rem', maxWidth: '800px', margin: '0 auto', lineHeight: '1.5' }}>
+                            {comparisonSummary}
+                        </p>
+                    )}
                 </div>
             )}
 
@@ -125,17 +126,22 @@ const Results = () => {
                         </thead>
                         <tbody>
                             {topics.map((topic, index) => {
-                                const topicName = typeof topic === 'string'
-                                    ? topic
-                                    : (topic.topic ?? topic.name ?? topic.subject ?? JSON.stringify(topic));
-                                const { label, color } = getRelevanceInfo(topic.score ?? score);
+                                const topicName = topic.gate_topic || JSON.stringify(topic);
+                                const { label, color } = getRelevanceInfo(topic.similarity ?? score);
                                 return (
                                     <tr key={index} style={{ backgroundColor: color }}>
-                                        <td><strong>{topicName}</strong></td>
-                                        <td><strong>{label}</strong></td>
-                                        <td>{topic.status ?? 'Evaluated'}</td>
                                         <td>
-                                            <Link to="/resources" style={{ color: 'var(--primary-navy)' }}>
+                                            <strong>{topicName}</strong>
+                                            {topic.matched_topic && (
+                                                <div style={{ fontSize: '0.85em', color: '#555', marginTop: '4px' }}>
+                                                    Matched with: {topic.matched_topic}
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td><strong>{label}</strong></td>
+                                        <td>{topic.priority ?? 'Evaluated'}</td>
+                                        <td>
+                                            <Link to="/resources" state={{ recommendations: lectures, topic: topic.gate_topic }} style={{ color: 'var(--primary-navy)' }}>
                                                 <i className="fa-solid fa-arrow-right"></i> View
                                             </Link>
                                         </td>
@@ -159,17 +165,23 @@ const Results = () => {
                         <i className="fa-brands fa-youtube" style={{ color: '#ff0000', marginRight: '8px' }}></i>
                         Recommended Lectures
                     </h3>
-                    <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                    <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         {lectures.map((lec, i) => {
-                            const url = typeof lec === 'string' ? lec : (lec.url ?? '#');
-                            const title = typeof lec === 'string' ? `Lecture ${i + 1}` : (lec.title ?? `Lecture ${i + 1}`);
+                            const url = lec.video?.url || '#';
+                            const title = lec.video?.title || `Lecture ${i + 1}`;
+                            const summary = lec.video?.summary;
                             return (
-                                <li key={i}>
+                                <li key={i} style={{ background: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
                                     <a href={url} target="_blank" rel="noopener noreferrer"
-                                        style={{ color: 'var(--primary-navy)', textDecoration: 'none', fontWeight: 500 }}>
-                                        <i className="fa-solid fa-play-circle" style={{ marginRight: '6px', color: '#ff0000' }}></i>
+                                        style={{ color: 'var(--primary-navy)', textDecoration: 'none', fontWeight: 600, fontSize: '1.05rem', display: 'flex', alignItems: 'center' }}>
+                                        <i className="fa-solid fa-play-circle" style={{ marginRight: '8px', color: '#ff0000', fontSize: '1.2rem' }}></i>
                                         {title}
                                     </a>
+                                    {summary && (
+                                        <p style={{ marginTop: '0.5rem', color: '#555', fontSize: '0.95rem', lineHeight: '1.4' }}>
+                                            {summary}
+                                        </p>
+                                    )}
                                 </li>
                             );
                         })}
