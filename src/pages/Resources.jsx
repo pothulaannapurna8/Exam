@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const Resources = () => {
     const navigate = useNavigate();
@@ -13,7 +13,9 @@ const Resources = () => {
         navigate('/dashboard');
     };
 
-    const resources = [
+    const location = useLocation();
+    // If navigation state contains recommendations (from Results page), use them; otherwise fallback to hardcoded resources.
+    const fallbackResources = [
         {
             topic: 'OS: Memory Management',
             icon: 'fa-microchip',
@@ -36,6 +38,16 @@ const Resources = () => {
             pyqs: '#'
         }
     ];
+    const recommendations = location.state?.recommendations || [];
+    // Transform recommendations into the same shape as fallbackResources for rendering.
+    const dynamicResources = recommendations.map((rec, idx) => ({
+        topic: rec.topic || `Recommendation ${idx + 1}`,
+        icon: 'fa-solid fa-video', // generic icon for video recommendation
+        youtube: rec.video?.url || '#',
+        notes: '#',
+        pyqs: '#'
+    }));
+    const resources = dynamicResources.length ? dynamicResources : fallbackResources;
 
     return (
         <main className="container">

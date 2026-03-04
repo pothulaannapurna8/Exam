@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import logo from '../assets/logo.jpeg';
 
 const SignIn = () => {
+    const [mode, setMode] = useState('login'); // 'login' or 'register'
+    const toggleMode = () => setMode(prev => prev === 'login' ? 'register' : 'login');
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
@@ -18,7 +20,7 @@ const SignIn = () => {
         }
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
 
         // Strict Validation
@@ -29,29 +31,50 @@ const SignIn = () => {
             alert('Please enter a valid Email address.');
             return;
         }
-
         if (!phonePattern.test(phone)) {
             alert('Please enter a valid 10-digit Indian mobile number.');
             return;
         }
 
-        const existingPhone = localStorage.getItem('userPhone');
-        const existingEmail = localStorage.getItem('userEmail');
+        // Prepare payload
+        const payload = {
+            name,
+            email,
+            phone: '+91' + phone,
+        };
 
-        // Unique Identity Rule
-        if (existingPhone && existingPhone === '+91' + phone && existingEmail && existingEmail !== email) {
-            alert(`This phone number (${phone}) is already registered with a different email address.`);
-            return;
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/${mode}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!response.ok) {
+                const err = await response.json();
+                alert(`Auth error: ${err.detail || response.statusText}`);
+                return;
+            }
+            const data = await response.json();
+            // Expect JWT token in response e.g., data.access_token
+            if (data.access_token) {
+                localStorage.setItem('jwt_token', data.access_token);
+            }
+            // Store user details locally as before
+            localStorage.setItem('userName', name);
+            localStorage.setItem('userEmail', email);
+            localStorage.setItem('userPhone', '+91' + phone);
+            localStorage.setItem('isLoggedIn', 'true');
+            // Redirect to dashboard
+            navigate('/dashboard');
+        } catch (err) {
+            console.error('Auth request failed:', err);
+            // Offline fallback: store details locally without JWT
+            localStorage.setItem('userName', name);
+            localStorage.setItem('userEmail', email);
+            localStorage.setItem('userPhone', '+91' + phone);
+            localStorage.setItem('isLoggedIn', 'true');
+            navigate('/dashboard');
         }
-
-        // Save details
-        localStorage.setItem('userName', name);
-        localStorage.setItem('userEmail', email);
-        localStorage.setItem('userPhone', '+91' + phone);
-        localStorage.setItem('isLoggedIn', 'true');
-
-        // Redirect
-        navigate('/dashboard');
     };
 
     return (
@@ -63,6 +86,11 @@ const SignIn = () => {
                 <h2>Welcome to ExamBridge Nexus</h2>
                 <p>Sign in to access your dashboard and resources</p>
 
+                <div style={{ marginBottom: '1rem', textAlign: 'center' }}>
+                    <button type="button" onClick={toggleMode} className="btn btn-toggle" style={{ background: 'var(--primary-navy)', color: '#fff' }}>
+                        Switch to {mode === 'login' ? 'Register' : 'Login'}
+                    </button>
+                </div>
                 <form id="signin-form" className="auth-form" onSubmit={handleSubmit}>
                     <div className="form-group">
                         <label htmlFor="signin-name">Full Name</label>
@@ -112,7 +140,7 @@ const SignIn = () => {
                                 style={{ position: 'absolute', right: '15px', top: '40px', color: 'var(--primary-green)', display: 'block' }}></i>
                         )}
                     </div>
-                    <button type="submit" className="btn btn-full" style={{ width: '100%', marginTop: '1.5rem' }}>Sign In</button>
+                    <button type="submit" className="btn btn-full" style={{ width: '100%', marginTop: '1.5rem' }}>{mode === 'login' ? 'Sign In' : 'Register'}</button>
                 </form>
             </div>
 
