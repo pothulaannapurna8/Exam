@@ -203,20 +203,20 @@ const Results = () => {
             </div>
 
             {/* Topic of the day */}
-            <div className="topic-of-day"
-                style={{ marginTop: '3rem', background: 'var(--bg-white)', borderRadius: 'var(--border-radius)', padding: '2rem', boxShadow: 'var(--box-shadow)', textAlign: 'center', border: '2px solid var(--primary-green)' }}>
-                <h3 style={{ color: 'var(--primary-navy)', marginBottom: '1rem' }}>
-                    <i className="fa-solid fa-star" style={{ color: '#f1c40f' }}></i> Topic of the Day
-                </h3>
-                <p style={{ marginBottom: '1.5rem', fontSize: '1.1rem' }}><strong>Operating Systems: Memory Management</strong></p>
-                <p style={{ marginBottom: '1.5rem', color: '#555' }}>
-                    Master the core concepts of paging, segmentation, and virtual memory.
-                    This topic is highly relevant for both GATE and college exams.
-                </p>
-                <Link to="/resources" className="btn">
-                    Go to Resources <i className="fa-solid fa-arrow-right" style={{ marginLeft: '5px' }}></i>
-                </Link>
-            </div>
+            {results.topic_of_the_day && (
+                <div className="topic-of-day"
+                    style={{ marginTop: '3rem', background: 'var(--bg-white)', borderRadius: 'var(--border-radius)', padding: '2rem', boxShadow: 'var(--box-shadow)', textAlign: 'center', border: '2px solid var(--primary-green)' }}>
+                    <h3 style={{ color: 'var(--primary-navy)', marginBottom: '1rem' }}>
+                        <i className="fa-solid fa-star" style={{ color: '#f1c40f' }}></i> Topic of the Day: {results.topic_of_the_day["Topic Name"]}
+                    </h3>
+                    <p style={{ marginBottom: '1.5rem', color: '#555', fontSize: '1.1rem', maxWidth: '800px', margin: '0 auto 1.5rem' }}>
+                        {results.topic_of_the_day["Explanation"]}
+                    </p>
+                    <Link to="/resources" state={{ recommendations: lectures, topic_of_the_day: results.topic_of_the_day }} className="btn">
+                        Learn More <i className="fa-solid fa-arrow-right" style={{ marginLeft: '5px' }}></i>
+                    </Link>
+                </div>
+            )}
         </main>
     );
 };
