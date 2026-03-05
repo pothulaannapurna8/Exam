@@ -1,0 +1,78 @@
+# Connect Frontend (React/Vite) to Backend (FastAPI)
+
+The frontend (`Exam/`) is a React+Vite app. The backend (`examBridge-NLP/`) is a FastAPI app. The upload flow already calls the right endpoint, but the **Results page completely misreads the backend response**, auth is localStorage-only (backend has auth routes but they're unused), and the Resources page is hardcoded.
+
+## Proposed Changes
+
+### Backend — `examBridge-NLP`
+
+#### [MODIFY] [main.py](file:///c:/Users/Annapurna/Desktop/new/examBridge-NLP/backend/main.py)
+- **Register the auth router** (`from backend.routes.auth import router`) so `/auth/register` and `/auth/login` become accessible.
+- **Add `http://localhost:5173`** to the CORS origins list (Vite's default dev port).
+
+---
+
+### Frontend — `Exam`
+
+#### [MODIFY] [Results.jsx](file:///c:/Users/Annapurna/Desktop/new/Exam/src/pages/Results.jsx)
+
+This is the **critical fix**. The page currently expects:
+```js
+results.similarity_score   // doesn't exist
+results.gaps               // doesn't exist
+results.lectures           // doesn't exist
+topic.score (0–1 decimal)  // doesn't exist
+topic.status               // doesn't exist
+```
+But the backend actually returns:
+```js
+results.overall_similarity   // number 0–100
+results.results              // array of { gate_topic, matched_topic, similarity, priority }
+results.recommendations      // array of { topic, video: { url, title, summary } }
+results.youtube_links        // flat array of URL strings
+results.comparison_result    // summary string
+results.critical_gaps        // count
+results.gate_topic_count     // count
+```
+
+**Changes:**
+- Map [overall_similarity](file:///c:/Users/Annapurna/Desktop/new/examBridge-NLP/main.py#68-74) (already 0–100) instead of `similarity_score`
+- Map `results.results` for the topic table (use `gate_topic`, `matched_topic`, [similarity](file:///c:/Users/Annapurna/Desktop/new/examBridge-NLP/main.py#75-100), `priority`)
+- Map `results.recommendations` for lecture cards (use `video.url`, `video.title`, `video.summary`)
+- Fix [getRelevanceInfo](file:///c:/Users/Annapurna/Desktop/new/Exam/src/pages/Results.jsx#4-12) to work with 0–100 percentages directly
+- Fix the download plan helper to use the correct field names
+- Show the `comparison_result` summary string from the backend
+
+#### [MODIFY] [Resources.jsx](file:///c:/Users/Annapurna/Desktop/new/Exam/src/pages/Resources.jsx)
+- Accept `recommendations` from navigation state (passed from Results page) so the page shows actual gap topics with real YouTube links instead of hardcoded placeholders.
+- Keep hardcoded fallback if no state is passed.
+
+#### [MODIFY] [SignIn.jsx](file:///c:/Users/Annapurna/Desktop/new/Exam/src/pages/SignIn.jsx)
+- Add a **registration/login toggle** to the form.
+- On submit, call `POST /auth/register` or `POST /auth/login` depending on mode.
+- Store the JWT token in `localStorage` (alongside existing `userName`, `userPhone` etc.).
+- Keep the existing client-side validation logic.
+- Graceful fallback: if the backend is unreachable, save to `localStorage` as before (offline mode).
+
+#### [MODIFY] [constants.js](file:///c:/Users/Annapurna/Desktop/new/Exam/src/constants.js)
+- Change default fallback to `http://localhost:7860` for local development (the backend's default port).
+
+#### [MODIFY] [vite.config.js](file:///c:/Users/Annapurna/Desktop/new/Exam/vite.config.js)
+- Add a dev proxy: `/api` → `http://localhost:7860` so the frontend can optionally call `/api/analyze/...` during development without CORS issues.
+
+---
+
+## Verification Plan
+
+### Browser Testing (Primary)
+1. **Start the backend**: `cd examBridge-NLP && python -m backend.main` (port 7860)
+2. **Start the frontend**: `cd Exam && npm run dev` (port 5173)
+3. **Test the Upload → Results flow**:
+   - Navigate to `/upload`, select a GATE branch, upload a PDF, submit
+   - Verify the Results page shows: overall similarity %, topic table with gate topics, and YouTube recommendations
+4. **Test Sign In**:
+   - Navigate to `/signin`, register a new account, verify redirect to dashboard
+   - Log out and log back in, verify JWT is stored
+
+> [!IMPORTANT]
+> The backend requires `sentence-transformers`, `torch`, and a MongoDB connection. If these aren't available locally the backend won't start. In that case, update [constants.js](file:///c:/Users/Annapurna/Desktop/new/Exam/src/constants.js) to point back to the production Hugging Face Space URL and test against production.
